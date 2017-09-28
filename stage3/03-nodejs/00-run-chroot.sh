@@ -1,0 +1,265 @@
+#!/bin/bash
+#
+# Copyright 2016,2017 IBM Corp.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+if [[ -e /mnt/dietpi_userdata ]]; then
+    echo -ne "\n\033[1;32mDiet-Pi\033[0m detected - only going to add the  \033[0;36mnode-red-start, -stop, -log\033[0m  commands.\n"
+    echo -ne "Flow files and other things worth backing up can be found in the \033[0;36m/mnt/dietpi_userdata/node-red\033[0m directory.\n\n"
+    echo -ne "Use the  \033[0;36mdietpi-software\033[0m  command to un-install and re-install \033[38;5;88mNode-RED\033[0m.\n"
+    echo "journalctl -f -n 25 -u node-red -o cat" > /usr/bin/node-red-log
+    chmod +x /usr/bin/node-red-log
+    echo "service node-red stop" > /usr/bin/node-red-stop
+    chmod +x /usr/bin/node-red-stop
+    echo "service node-red start" > /usr/bin/node-red-start
+    echo "journalctl -f -n 0 -u node-red -o cat" >> /usr/bin/node-red-start
+    chmod +x /usr/bin/node-red-start
+else
+
+wget -q --spider https://www.npmjs.com/package/node-red
+if  [ $? -eq 0 ]; then
+if [[ "$(uname)" != "Darwin" ]]; then
+if [[ $(cat /etc/*-release | grep VERSION=) != *"wheezy"* ]]; then
+
+EXTRANODES=""
+EXTRAW="update"
+NODERED_HOME="/home/pi"
+NODERED_USER="pi"
+NODERED_GROUP=`id -gn`
+GLOBAL="true"
+TICK='\033[1;32m\u2714\033[0m'
+CROSS='\033[1;31m\u2718\033[0m'
+if [ ! -d "/usr/lib/node_modules/node-red-node-serialport" ] && [ ! -d "$NODERED_HOME/.node-red/node_modules/node-red-node-serialport" ]; then
+    EXTRANODES="node-red-node-random node-red-contrib-ibm-watson-iot node-red-node-ping node-red-contrib-play-audio node-red-node-smooth node-red-node-serialport"
+    EXTRAW="install"
+fi
+
+cd "$NODERED_HOME" || exit 1
+clear
+echo "Running Node-RED $EXTRAW for user $NODERED_USER at $NODERED_HOME"
+time1=$(date)
+echo "" | sudo tee -a /var/log/nodered-install.log >>/dev/null
+echo "***************************************" | sudo tee -a /var/log/nodered-install.log >>/dev/null
+echo "" | sudo tee -a /var/log/nodered-install.log >>/dev/null
+echo "Started : "$time1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+echo "Running for user $NODERED_USER at $NODERED_HOME" | sudo tee -a /var/log/nodered-install.log >>/dev/null
+
+# stop any running node-red service
+if sudo service nodered stop 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null ; then CHAR=$TICK; else CHAR=$CROSS; fi
+echo -ne "  Stop Node-RED                       $CHAR\r\n"
+
+# save any global nodes
+GLOBALNODES=$(find /usr/local/lib/node_modules/node-red-* -maxdepth 0 -type d -printf '%f\n' 2>/dev/null)
+GLOBALNODES="$GLOBALNODES $(find /usr/lib/node_modules/node-red-* -maxdepth 0 -type d -printf '%f\n' 2>/dev/null)"
+echo "Found global nodes: $GLOBALNODES :" | sudo tee -a /var/log/nodered-install.log >>/dev/null
+
+# remove any old node-red installs or files
+sudo apt-get remove -y nodered 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+sudo rm -rf /usr/local/lib/node_modules/node-red* /usr/local/bin/node-red* 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+sudo rm -rf /usr/lib/node_modules/node-red* /usr/bin/node-red* 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+echo -ne '  Remove old version of Node-RED      \033[1;32m\u2714\033[0m\r\n'
+
+# maybe remove node.js - or upgrade if nodesoure.list exists
+if [[ -e $NODERED_HOME/.nvm ]]; then
+    echo -ne '  Using NVM to manage node.js         +   please run   \033[0;36mnvm use lts/*\033[0m   before running ./node-red\r\n'
+    export NVM_DIR=$NODERED_HOME/.nvm
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+    nvm install --lts/* >/dev/null 2>&1
+    nvm use lts/* >/dev/null 2>&1
+    nvm alias default lts/* >/dev/null 2>&1
+    GLOBAL="false"
+    ln -f -s $NODERED_HOME/.nvm/versions/node/$(nvm current)/lib/node_modules/node-red/red.js  $NODERED_HOME/node-red
+    echo -ne "  Update node.js LTS                  $CHAR"
+elif [[ $(which n) ]]; then
+    echo -ne "  Using N to manage node.js           +\r\n"
+    if sudo n lts 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null; then CHAR=$TICK; else CHAR=$CROSS; fi
+    echo -ne "  Update node.js LTS                  $CHAR"
+elif [ -e /etc/apt/sources.list.d/nodesource.list ]; then
+    nv=`node -v | cut -d "." -f1`
+    if [ "$nv" = "v0" ] || [ "$nv" = "v1" ] || [ "$nv" = "v3" ] || [ "$nv" = "v4" ] || [ "$nv" = "v5" ]; then
+        sudo apt-get remove -y nodejs nodejs-legacy npm 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+        sudo rm -f /etc/apt/sources.d/nodesource.list
+        if curl -sL https://deb.nodesource.com/setup_6.x | sudo -E bash - 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null; then CHAR=$TICK; else CHAR=$CROSS; fi
+    else
+        CHAR="-"
+    fi
+    echo -ne "  Remove old version of node.js       $CHAR\r\n"
+    echo -ne "  Update node.js LTS                  \r"
+    if sudo apt-get install -y nodejs 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null; then CHAR=$TICK; else CHAR=$CROSS; fi
+    echo -ne "  Update node.js LTS                  $CHAR"
+else
+    # clean out old nodejs stuff
+    sudo apt-get remove -y nodejs nodejs-legacy npm 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+    sudo dpkg -r nodejs 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+    sudo dpkg -r node 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+    sudo rm -f /usr/local/bin/npm* 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+    sudo apt-get autoremove -y 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+    echo -ne "  Remove old version of node.js       \033[1;32m\u2714\033[0m\r\n"
+    # grab the correct LTS bundle for the processor
+    if cat /proc/cpuinfo | grep model | grep -q ARMv6 ; then
+        echo -ne "  Install node.js for Armv6           \r"
+        f=$(curl -sL https://nodejs.org/download/release/latest-boron/ | grep "armv6l.tar.gz" | cut -d '"' -f 2)
+        curl -sL -o node.tgz https://nodejs.org/download/release/latest-boron/$f 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+        # unpack it into the correct places
+        hd=$(head -c 9 node.tgz)
+        if [ "$hd" == "<!DOCTYPE" ]; then
+            CHAR="$CROSS File $f not downloaded";
+        else
+            if sudo tar -zxf node.tgz --strip-components=1 -C /usr 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null; then CHAR=$TICK; else CHAR=$CROSS; fi
+        fi
+        # remove the tgz file to save space
+        rm node.tgz 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+        echo -ne "  Install node.js for Armv6           $CHAR"
+    else
+        echo -ne "  Install node.js LTS                 \r"
+        # use the official script to install for other debian platforms
+        curl -sL https://deb.nodesource.com/setup_6.x | sudo -E bash - 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+        if sudo apt-get install -y nodejs 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null; then CHAR=$TICK; else CHAR=$CROSS; fi
+        echo -ne "  Install node.js LTS                 $CHAR"
+    fi
+fi
+hash -r
+rc=""
+if nov=$(node -v 2>/dev/null); then :; else rc="ERR"; fi
+if npv=$(npm -v 2>/dev/null); then :; else rc="ERR"; fi
+if [[ $rc == "" ]]; then
+    echo -ne "   Node $nov   Npm $npv\r\n"
+else
+    echo -ne "\b$CROSS   Failed to install node.js - Exit\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n"
+    exit 2
+fi
+
+# clean up the npm cache and node-gyp
+if [[ $GLOBAL == "true" ]]; then
+    sudo npm cache clean --force 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+else
+    npm cache clean --force 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+fi
+if sudo rm -rf "$NODERED_HOME/.node-gyp" "$NODERED_HOME/.npm" /root/.node-gyp /root/.npm; then CHAR=$TICK; else CHAR=$CROSS; fi
+echo -ne "  Clean npm cache                     $CHAR\r\n"
+
+# and install Node-RED
+if [[ $GLOBAL == "true" ]]; then
+    if sudo npm i -g --unsafe-perm --no-progress node-red@latest 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null; then CHAR=$TICK; else CHAR=$CROSS; fi
+else
+    if npm i -g --unsafe-perm --no-progress node-red@latest 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null; then CHAR=$TICK; else CHAR=$CROSS; fi
+fi
+nrv=$(npm --no-progress -g ls node-red | grep node-red | cut -d '@' -f 2 | sudo tee -a /var/log/nodered-install.log) >>/dev/null 2>&1
+echo -ne "  Install Node-RED core               $CHAR   $nrv\r\n"
+
+# install any nodes, that were installed globally, as local instead
+mkdir -p "$NODERED_HOME/.node-red/node_modules"
+sudo chown -R $NODERED_USER:$NODERED_GROUP $NODERED_HOME/.node-red/ 2>&1 >>/dev/null
+pushd "$NODERED_HOME/.node-red" 2>&1 >>/dev/null
+    if [ ! -f "package.json" ]; then
+        echo '{' > package.json
+        echo '  "name": "node-red-project",' >> package.json
+        echo '  "description": "A Node-RED Project",' >> package.json
+        echo '  "version": "0.0.1",' >> package.json
+        echo '  "dependencies": {' >> package.json
+        echo '  }' >> package.json
+        echo '}' >> package.json
+    fi
+    CHAR="-"
+    if [[ $GLOBALNODES != " " ]]; then
+        if npm i --unsafe-perm --save --no-progress $GLOBALNODES 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null; then CHAR=$TICK; else CHAR=$CROSS; fi
+    fi
+    echo -ne "  Move global nodes to local          $CHAR\r\n"
+
+    CHAR="-"
+    if [[ ! -z $EXTRANODES ]]; then
+        echo "Installing extra nodes: $EXTRANODES :" | sudo tee -a /var/log/nodered-install.log >>/dev/null
+        if npm i --unsafe-perm --save --no-progress $EXTRANODES 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null; then CHAR=$TICK; else CHAR=$CROSS; fi
+    fi
+    echo -ne "  Install extra Pi nodes              $CHAR\r\n"
+
+    # try to rebuild any already installed nodes
+    if npm rebuild  2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null; then CHAR=$TICK; else CHAR=$CROSS; fi
+    echo -ne "  Npm rebuild existing nodes          $CHAR\r\n"
+popd 2>&1 >>/dev/null
+
+# add the shortcut and start/stop/log scripts to the menu
+sudo mkdir -p /usr/bin
+wget -q --spider https://raw.githubusercontent.com/node-red/raspbian-deb-package/master/resources/node-red-icon.svg
+if  [ $? -eq 0 ]; then
+    sudo curl -sL -o /usr/share/icons/gnome/scalable/apps/node-red-icon.svg https://raw.githubusercontent.com/node-red/raspbian-deb-package/master/resources/node-red-icon.svg 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+    sudo curl -sL -o /usr/share/applications/Node-RED.desktop https://raw.githubusercontent.com/node-red/raspbian-deb-package/master/resources/Node-RED.desktop 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+    sudo curl -sL -o /usr/bin/node-red-start https://raw.githubusercontent.com/node-red/raspbian-deb-package/master/resources/node-red-start2 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+    sudo curl -sL -o /usr/bin/node-red-stop https://raw.githubusercontent.com/node-red/raspbian-deb-package/master/resources/node-red-stop 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+    sudo curl -sL -o /usr/bin/node-red-log https://raw.githubusercontent.com/node-red/raspbian-deb-package/master/resources/node-red-log 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+    sudo chmod +x /usr/bin/node-red-start
+    sudo chmod +x /usr/bin/node-red-stop
+    sudo chmod +x /usr/bin/node-red-log
+    echo -ne "  Add menu shortcut                   $TICK\r\n"
+else
+    echo -ne "  Add menu shortcut                   $CROSS\r\n"
+fi
+
+# add systemd script and configure it for $NODERED_USER
+if sudo curl -sL -o /lib/systemd/system/nodered.service https://raw.githubusercontent.com/node-red/raspbian-deb-package/master/resources/nodered.service 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null; then CHAR=$TICK; else CHAR=$CROSS; fi
+# set the User Group and WorkingDirectory in nodered.service
+sudo sed -i 's#^User=pi#User='$NODERED_USER'#;s#^Group=pi#Group='$NODERED_GROUP'#;s#^WorkingDirectory=/home/pi#WorkingDirectory='$NODERED_HOME'#;' /lib/systemd/system/nodered.service
+sudo systemctl daemon-reload 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+echo -ne "  Update systemd script               $CHAR\r\n"
+
+# on Pi, add cpu temp example, make sure ping works, refresh desktop menu
+if sudo grep -q BCM2 /proc/cpuinfo; then
+    lxpanelctl restart 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+    sudo curl -sL -o /usr/lib/node_modules/node-red-contrib-ibm-watson-iot/examples/Pi\ cpu\ temperature.json https://raw.githubusercontent.com/node-red/raspbian-deb-package/master/resources/Pi%20cpu%20temperature.json 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+    sudo setcap cap_net_raw+eip $(eval readlink -f `which node`) 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+    sudo setcap cap_net_raw=ep /bin/ping 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+fi
+
+# Finally update the update script
+if sudo curl -sL -o /tmp/update-nodejs-and-nodered https://raw.githubusercontent.com/node-red/raspbian-deb-package/master/resources/update-nodejs-and-nodered 2>&1 | sudo tee -a /var/log/nodered-install.log >>/dev/null; then CHAR=$TICK; else CHAR=$CROSS; fi
+sudo chmod +x /tmp/update-nodejs-and-nodered
+echo -ne "  Update update script                $CHAR\r\n"
+
+echo -ne "\r\n\r\n\r\n"
+echo -ne "All done.\r\n"
+if [[ $GLOBAL == "true" ]]; then
+    echo -ne "  You can now start Node-RED with the command  \033[0;36mnode-red-start\033[0m\r\n"
+    echo -ne "  or using the icon under   Menu / Programming / Node-RED\r\n"
+else
+    echo -ne "  You can now start Node-RED with the command  \033[0;36m./node-red\033[0m\r\n"
+fi
+echo -ne "  Then point your browser to \033[0;36mlocalhost:1880\033[0m or \033[0;36mhttp://{your_pi_ip-address}:1880\033[0m\r\n"
+echo -ne "\r\nStarted  $time1  -  Finished  $(date)\r\n\r\n"
+echo "Finished : "$time1 | sudo tee -a /var/log/nodered-install.log >>/dev/null
+else
+echo " "
+echo "Sorry - I'm not able to upgrade old Wheezy installations. Please think about updating."
+echo "Please see the documentation at http://nodered.org/docs/getting-started/upgrading."
+echo " "
+exit 1
+fi
+else
+echo " "
+echo "Sorry - I'm not supposed to be run on a Mac."
+echo "Please see the documentation at http://nodered.org/docs/getting-started/upgrading."
+echo " "
+exit 1
+fi
+else
+echo " "
+echo "Sorry - cannot connect to internet - not going to touch anything."
+echo "https://www.npmjs.com/package/node-red   is not reachable."
+echo "Please ensure you have a working internet connection."
+echo " "
+exit 1
+fi
+fi
+if [ -e /tmp/update-nodejs-and-nodered ] && [ -s /tmp/update-nodejs-and-nodered ]; then sudo mv /tmp/update-nodejs-and-nodered /usr/bin/update-nodejs-and-nodered; fi
+
+npm install -g npm
+cd "$NODERED_HOME"; npm install node-red-dashboard
