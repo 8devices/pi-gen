@@ -9,3 +9,9 @@ policykit-1
 gvfs
 rfkill
 chromium-browser rpi-chromium-mods
+gldriver-test
+fonts-droid-fallback
+vim
+gedit
+tcpdump
+openjdk-8-jre
