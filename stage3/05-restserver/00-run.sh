@@ -18,6 +18,7 @@ on_chroot << EOF
   cd
   git clone https://github.com/8devices/wakaama.git
   cd wakaama
+  git checkout v1.0.1
   mkdir build && cd build && cmake ../examples/rest-server && make
   install -m 755 restserver /usr/local/sbin/
   systemctl enable restserver
