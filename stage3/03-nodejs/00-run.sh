@@ -14,9 +14,9 @@ apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
 
 apt-get --purge remove node
 apt-get --purge remove nodejs
-curl -sL https://deb.nodesource.com/setup_6.x | /bin/bash -e -
+curl -sL https://deb.nodesource.com/setup_8.x | /bin/bash -e -
 apt-get install -y nodejs
-npm install -g npm@5.3.0
+npm install -g npm@6.1.0
 
 #################
 # Checkout node #
@@ -24,7 +24,7 @@ npm install -g npm@5.3.0
 NODE_BUILD_PATH=${BASE_DIR}/build/node
 git clone https://github.com/nodejs/node.git $NODE_BUILD_PATH
 cd $NODE_BUILD_PATH
-git checkout v6.11.2
+git checkout v8.11.3
 
 
 #######################
@@ -95,17 +95,17 @@ npm_install () {
   cp -r $TEMP_PATH/* $TARGET_PATH
 }
 
-npm_install npm@5.3.0
+npm_install npm@6.1.0
 npm_install node-red
 npm_install coap
 npm_install node-red-dashboard
 apt-get install -y libavahi-compat-libdnssd-dev
 npm_install mdns
 
-npm_install git+https://github.com/8devices/node-red-contrib-lesley
+npm_install github:8devices/node-red-contrib-lesley#v0.0.1
 
 # Resolve globally installed packages
-ln -s ${TARGET_PATH#$ROOTFS_DIR}/lib/node_modules $ROOTFS_DIR/lib/node
+ln -fs ${TARGET_PATH#$ROOTFS_DIR}/lib/node_modules $ROOTFS_DIR/lib/node
 
 #######################################
 # Install WPAN service Node-RED flows #
