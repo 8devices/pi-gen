@@ -10,4 +10,5 @@ OT_PSKC=`${SCRIPT_DIR}pskc $OT_PASSPHRASE $OT_XPANID $OT_NETWORK_NAME`
 wpanctl setprop Network:XPANID $OT_XPANID
 wpanctl setprop Network:Key $OT_NETWORK_KEY
 wpanctl setprop Network:PSKc $OT_PSKC
+wpanctl insertprop IPv6:MulticastAddresses ff05::c
 wpanctl form -c 11 $OT_NETWORK_NAME
