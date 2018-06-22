@@ -9,6 +9,9 @@ ExecStart=/usr/local/sbin/restserver
 KillSignal=SIGINT
 # Auto restart on crash
 Restart=on-failure
+RestartSec=3
+StartLimitIntervalSec=10
+StartLimitBurst=5
 # Tag things in the log
 SyslogIdentifier=REST
 
